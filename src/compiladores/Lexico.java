@@ -112,7 +112,27 @@ public class Lexico {
                 //     } 
                 //     return token;
 
-                } else if (caractere == '>'){
+                }else if (caractere == '\'') {
+                    caractere = (char) br.read();
+                    coluna++;
+                    while (caractere != '\'' && caractere != 65535 && caractere != '\n') {
+                        lexema.append(caractere);
+                        caractere = (char) br.read();
+                        coluna++;
+                    }
+                    if (caractere == '\'') {
+                        caractere = (char) br.read();
+                        coluna++;
+                        token.setClasse(ClasseToken.cString);
+                        token.setValor(new ValorToken(lexema.toString()));
+                        return token;
+                    }
+                    else {
+                        System.err.println("String não fechada corretamente na linha " + linha + ", coluna " + coluna);
+                        System.exit(-1);
+                    }
+
+                }else if (caractere == '>'){
                     token.setClasse(ClasseToken.cMaior);
                     caractere = (char) br.read();
                     coluna++;
