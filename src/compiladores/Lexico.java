@@ -132,7 +132,27 @@ public class Lexico {
                         System.exit(-1);
                     }
 
-                }else if (caractere == '>'){
+                } else if (caractere == '{') {
+                    caractere = (char) br.read();
+                    coluna++;
+                    while (caractere != '}' && caractere != 65535) {
+                        if (caractere == '\n') {
+                            linha++;
+                            coluna = 0;
+                        }
+                        caractere = (char) br.read();
+                        coluna++;
+                        if (caractere == 65535) {
+                            System.err.println("Comentário não finalizado antes do fim do arquivo na linha " + linha + ", coluna " + coluna);
+                            System.exit(-1);
+                        }
+                    }
+                    if (caractere == '}') {
+                        caractere = (char) br.read();
+                        coluna++;
+                    }
+
+                } else if (caractere == '>'){
                     token.setClasse(ClasseToken.cMaior);
                     caractere = (char) br.read();
                     coluna++;

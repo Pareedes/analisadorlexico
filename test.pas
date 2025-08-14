@@ -1,8 +1,11 @@
 xpt421z    127
 ; teste
+'{orbolato}'
 
-'pato'  <=
+'pato'  <= {comentario}
 for
-Then
+Then { eeeii
+uau
+}
 beGIN
 123
