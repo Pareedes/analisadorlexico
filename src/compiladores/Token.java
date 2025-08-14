@@ -6,6 +6,11 @@ public class Token {
     private int linha;
     private int coluna;
     
+    public Token(int linha2, int coluna2) {
+        this.linha = linha2;
+        this.coluna = coluna2;
+    }
+    
     public ClasseToken getClasse() {
         return classe;
     }

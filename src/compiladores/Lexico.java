@@ -3,14 +3,20 @@ package compiladores;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.List;
 
 public class Lexico {
     private String nomeArquivo;
     private BufferedReader br;
     private char caractere;
+    private List<String> palavrasReservadas;
+    private int linha;
+    private int coluna;
 
     public Lexico(String nomeArquivo) {
         this.nomeArquivo = nomeArquivo;
@@ -22,6 +28,13 @@ public class Lexico {
             System.out.println("Erro ao abrir o arquivo: " + nomeArquivo);
             System.out.println("Caminho do arquivo: " + caminhoArquivo);
         }
+        palavrasReservadas = Arrays.asList("program", "begin", "end", "var", "integer", "procedure",
+              "function", "read", "write", "writeln", "for", "do", "repeat",
+              "until", "while", "if", "then", "else", "or", "and", "not",
+              "true", "false");
+
+        linha = 1;
+        coluna = 1;
     }
 
     public Token getNextToken() {
@@ -33,13 +46,18 @@ public class Lexico {
 
 			while (caractere != 65535) { // -1 fim da stream
                 lexema = new StringBuilder();
-                token = new Token();
+                token = new Token(linha, coluna);
 				if (Character.isLetter(caractere)) {
 					while (Character.isLetter(caractere) || Character.isDigit(caractere)) {
                         lexema.append(caractere);
                         caractere = (char) br.read();
+                         coluna++;
                     }
-                    token.setClasse(ClasseToken.cId);
+                    if (palavrasReservadas.contains(lexema.toString().toLowerCase())) {
+                        token.setClasse(ClasseToken.cPalRes);
+                    } else {
+                        token.setClasse(ClasseToken.cId);
+                    }
                     token.setValor(new ValorToken(lexema.toString()));
                     return token;
 
@@ -47,25 +65,82 @@ public class Lexico {
                     while (Character.isDigit(caractere)) {
                         lexema.append(caractere);
                         caractere = (char) br.read();
+                        coluna++;
                     }
                     token.setClasse(ClasseToken.cInt);
                     token.setValor(new ValorToken(Integer.parseInt(lexema.toString())));
                     return token;
 
+				} else if (caractere == ' ' || caractere == '\t'){ 
+                    while (caractere == ' ' || caractere == '\t') {
+                        caractere = (char) br.read();
+                        coluna++;
+                    }
+
 				} else if (Character.isWhitespace(caractere)) {
                     while (Character.isWhitespace(caractere)) {
+                        if (caractere == '\n') {
+                            linha++;
+                            coluna = 0;
+                        }
                         caractere = (char) br.read();
+                        coluna++;
                     }
-				} else if (caractere == ';'){
+                } else if (caractere == ';'){
                     token.setClasse(ClasseToken.cPontoVirgula);
                     caractere = (char) br.read();
+                    coluna++;
                     return token;
-				} else {
+
+				}  else if (caractere == ':') {
+                    token.setClasse(ClasseToken.cDoisPontos);
+                    caractere = (char) br.read();
+                    coluna++;
+                    if (caractere == '=') {
+                        token.setClasse(ClasseToken.cAtrib);
+                        caractere = (char) br.read();
+                        coluna++;
+                    } 
+                    return token;
+
+                // }   else if (caractere == '!') {
+                //     token.setClasse(ClasseToken.cDoisPontos);
+                //     caractere = (char) br.read();
+                //     if (caractere == '=') {
+                //         token.setClasse(ClasseToken.cDiferente);
+                //         caractere = (char) br.read();
+                //     } 
+                //     return token;
+
+                } else if (caractere == '>'){
+                    token.setClasse(ClasseToken.cMaior);
+                    caractere = (char) br.read();
+                    coluna++;
+                    if (caractere == '=') {
+                        token.setClasse(ClasseToken.cMaiorIgual);
+                        caractere = (char) br.read();
+                        coluna++;
+                    }
+                    return token;
+
+				} else if (caractere == '<'){
+                    token.setClasse(ClasseToken.cMaior);
+                    caractere = (char) br.read();
+                    coluna++;
+                    if (caractere == '=') {
+                        token.setClasse(ClasseToken.cMenorIgual);
+                        caractere = (char) br.read();
+                        coluna++;
+                    }
+                    return token;
+
+				} 
+                    else {
                     System.err.println("Caractere inválido: " + caractere);
                     System.exit(-1);
 				}
 			}
-            token = new Token();
+            token = new Token(linha, coluna);
             token.setClasse(ClasseToken.cEOF);
             return token;
 

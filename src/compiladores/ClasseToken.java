@@ -7,6 +7,7 @@ public enum ClasseToken {
     cAtrib,
     cMaior,
     cMenor,
+    cString,
     cMaiorIgual,
     cMenorIgual,
     cIgual,
