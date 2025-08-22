@@ -10,6 +10,7 @@ public class Compilador {
             System.out.println(token);
             token = l.getNextToken();
         }
+        System.out.println(token); // Print EOF token
     }
 }
 

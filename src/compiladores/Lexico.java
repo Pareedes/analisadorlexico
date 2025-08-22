@@ -92,6 +92,48 @@ public class Lexico {
                     coluna++;
                     return token;
 
+                } else if (caractere == ','){
+                    token.setClasse(ClasseToken.cVirgula);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == '(') {
+                    token.setClasse(ClasseToken.cParEsq);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == ')') {
+                    token.setClasse(ClasseToken.cParDir);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == '*') {
+                    token.setClasse(ClasseToken.cMultiplicacao);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == '+') {
+                    token.setClasse(ClasseToken.cAdicao);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == '-') {
+                    token.setClasse(ClasseToken.cSubtracao);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
+                } else if (caractere == '.') {
+                    token.setClasse(ClasseToken.cPonto);
+                    caractere = (char) br.read();
+                    coluna++;
+                    return token;
+
 				}  else if (caractere == ':') {
                     token.setClasse(ClasseToken.cDoisPontos);
                     caractere = (char) br.read();
@@ -103,15 +145,7 @@ public class Lexico {
                     } 
                     return token;
 
-                // }   else if (caractere == '!') {
-                //     token.setClasse(ClasseToken.cDoisPontos);
-                //     caractere = (char) br.read();
-                //     if (caractere == '=') {
-                //         token.setClasse(ClasseToken.cDiferente);
-                //         caractere = (char) br.read();
-                //     } 
-                //     return token;
-
+                // STRING
                 }else if (caractere == '\'') {
                     caractere = (char) br.read();
                     coluna++;
@@ -132,6 +166,7 @@ public class Lexico {
                         System.exit(-1);
                     }
 
+                // COMENTARIO
                 } else if (caractere == '{') {
                     caractere = (char) br.read();
                     coluna++;
@@ -183,6 +218,7 @@ public class Lexico {
             token = new Token(linha, coluna);
             token.setClasse(ClasseToken.cEOF);
             return token;
+            
 
 		} catch (IOException e) {
 			System.err.println("Não foi possível abrir o arquivo ou ler do arquivo: " + nomeArquivo);
