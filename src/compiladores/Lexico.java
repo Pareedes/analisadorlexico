@@ -31,7 +31,7 @@ public class Lexico {
         palavrasReservadas = Arrays.asList("program", "begin", "end", "var", "integer", "procedure",
               "function", "read", "write", "writeln", "for", "do", "repeat",
               "until", "while", "if", "then", "else", "or", "and", "not",
-              "true", "false");
+              "true", "false", "to");
 
         linha = 1;
         coluna = 1;
@@ -199,7 +199,7 @@ public class Lexico {
                     return token;
 
 				} else if (caractere == '<'){
-                    token.setClasse(ClasseToken.cMaior);
+                    token.setClasse(ClasseToken.cMenor);
                     caractere = (char) br.read();
                     coluna++;
                     if (caractere == '=') {
