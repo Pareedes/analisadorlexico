@@ -1,5 +1,7 @@
+{ Programa que nao faz nada }
 Program MuitoDoido;
-Var TempoEmAnos, ValorSalario, x, y, z, a, b, c : Integer; 
+Var TempoEmAnos, ValorSalario, x, y, z : Integer;
+a, b, c : Integer; 
 Begin 
     If (TempoEmAnos > 10) Then
     Begin

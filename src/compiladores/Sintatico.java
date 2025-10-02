@@ -65,6 +65,8 @@ public class Sintatico {
             token = lexico.getNextToken();
             dvar();
             mais_dc();
+        } else if (token.getClasse() == ClasseToken.cId) {
+            mostrarErro("Era esperado a palavra reservada 'var' antes da declaração de variáveis.");
         }
     }
 
@@ -120,13 +122,11 @@ public class Sintatico {
         }
     }
 
-    // Nova função para rotina (procedure/function)
     private void rotina() {
         while (ehPalavraReservada("procedure") || ehPalavraReservada("function")) {
             token = lexico.getNextToken();
             if (token.getClasse() == ClasseToken.cId) {
                 token = lexico.getNextToken();
-                // Parâmetros e corpo podem ser tratados aqui
                 if (token.getClasse() == ClasseToken.cPontoVirgula) {
                     token = lexico.getNextToken();
                 } else {
@@ -138,7 +138,6 @@ public class Sintatico {
         }
     }
 
-    // Expanda sentencas() para novas palavras reservadas
     private void sentencas() {
         while (true) {
             if (token.getClasse() == ClasseToken.cId) {
@@ -174,7 +173,7 @@ public class Sintatico {
                     token = lexico.getNextToken();
                     // Consome id ou int
                     if (token.getClasse() == ClasseToken.cId ||
-                        token.getClasse() == ClasseToken.cInt) {
+                            token.getClasse() == ClasseToken.cInt) {
                         token = lexico.getNextToken();
                     }
                     // Consome ')'
@@ -189,30 +188,6 @@ public class Sintatico {
                     continue;
                 } else {
                     mostrarErro("Era esperado ';' após read.");
-                }
-            } else if (ehPalavraReservada("writeln")) {
-                token = lexico.getNextToken();
-                // Consome parâmetros entre parênteses, se houver
-                if (token.getClasse() == ClasseToken.cParEsq) {
-                    token = lexico.getNextToken();
-                    // Consome string, id ou int
-                    if (token.getClasse() == ClasseToken.cString ||
-                            token.getClasse() == ClasseToken.cId ||
-                            token.getClasse() == ClasseToken.cInt) {
-                        token = lexico.getNextToken();
-                    }
-                    // Consome ')'
-                    if (token.getClasse() == ClasseToken.cParDir) {
-                        token = lexico.getNextToken();
-                    } else {
-                        mostrarErro("Era esperado ')' após parâmetro de writeln.");
-                    }
-                }
-                if (token.getClasse() == ClasseToken.cPontoVirgula) {
-                    token = lexico.getNextToken();
-                    continue;
-                } else {
-                    mostrarErro("Era esperado ';' após writeln.");
                 }
             } else if (ehPalavraReservada("for")) {
                 token = lexico.getNextToken();
@@ -245,7 +220,7 @@ public class Sintatico {
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cParEsq) {
                     token = lexico.getNextToken();
-                    expressao(); // Deve consumir toda a expressão relacional
+                    expressao();
                     if (token.getClasse() == ClasseToken.cParDir) {
                         token = lexico.getNextToken();
                     } else {
@@ -300,27 +275,55 @@ public class Sintatico {
                 }
             } else if (ehPalavraReservada("write")) {
                 token = lexico.getNextToken();
-                // Consome parâmetros entre parênteses, se houver
                 if (token.getClasse() == ClasseToken.cParEsq) {
                     token = lexico.getNextToken();
-                    // Consome string, id ou int
+                    // Exige pelo menos um parâmetro
                     if (token.getClasse() == ClasseToken.cString ||
-                        token.getClasse() == ClasseToken.cId ||
-                        token.getClasse() == ClasseToken.cInt) {
+                            token.getClasse() == ClasseToken.cId ||
+                            token.getClasse() == ClasseToken.cInt) {
                         token = lexico.getNextToken();
+                    } else {
+                        mostrarErro("write requer pelo menos um parâmetro.");
                     }
-                    // Consome ')'
                     if (token.getClasse() == ClasseToken.cParDir) {
                         token = lexico.getNextToken();
                     } else {
                         mostrarErro("Era esperado ')' após parâmetro de write.");
                     }
+                } else {
+                    mostrarErro("Era esperado '(' após write.");
                 }
                 if (token.getClasse() == ClasseToken.cPontoVirgula) {
                     token = lexico.getNextToken();
                     continue;
                 } else {
                     mostrarErro("Era esperado ';' após write.");
+                }
+            } else if (ehPalavraReservada("writeln")) {
+                token = lexico.getNextToken();
+                if (token.getClasse() == ClasseToken.cParEsq) {
+                    token = lexico.getNextToken();
+                    // Exige pelo menos um parâmetro
+                    if (token.getClasse() == ClasseToken.cString ||
+                            token.getClasse() == ClasseToken.cId ||
+                            token.getClasse() == ClasseToken.cInt) {
+                        token = lexico.getNextToken();
+                    } else {
+                        mostrarErro("writeln requer pelo menos um parâmetro.");
+                    }
+                    if (token.getClasse() == ClasseToken.cParDir) {
+                        token = lexico.getNextToken();
+                    } else {
+                        mostrarErro("Era esperado ')' após parâmetro de writeln.");
+                    }
+                } else {
+                    mostrarErro("Era esperado '(' após writeln.");
+                }
+                if (token.getClasse() == ClasseToken.cPontoVirgula) {
+                    token = lexico.getNextToken();
+                    continue;
+                } else {
+                    mostrarErro("Era esperado ';' após writeln.");
                 }
             } else if (ehPalavraReservada("end")) {
                 break;
@@ -360,28 +363,40 @@ public class Sintatico {
             }
         } else if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
             token = lexico.getNextToken();
-            // Consome operadores relacionais e próximos fatores
+            // ERRO: dois operandos seguidos sem operador
+            if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
+                mostrarErro("Era esperado um operador entre os operandos.");
+            }
+            // Operadores relacionais
             while (token.getClasse() == ClasseToken.cMaior ||
-                token.getClasse() == ClasseToken.cMenor ||
-                token.getClasse() == ClasseToken.cMaiorIgual ||
-                token.getClasse() == ClasseToken.cMenorIgual ||
-                token.getClasse() == ClasseToken.cIgual ||
-                token.getClasse() == ClasseToken.cDiferente) {
+                    token.getClasse() == ClasseToken.cMenor ||
+                    token.getClasse() == ClasseToken.cMaiorIgual ||
+                    token.getClasse() == ClasseToken.cMenorIgual ||
+                    token.getClasse() == ClasseToken.cIgual ||
+                    token.getClasse() == ClasseToken.cDiferente) {
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                     token = lexico.getNextToken();
+                    // ERRO: dois operandos seguidos sem operador
+                    if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
+                        mostrarErro("Era esperado um operador entre os operandos.");
+                    }
                 } else {
                     mostrarErro("Era esperado identificador ou inteiro após operador relacional.");
                 }
             }
-            // Consome operadores aritméticos e próximos fatores
+            // Operadores aritméticos
             while (token.getClasse() == ClasseToken.cAdicao ||
-                token.getClasse() == ClasseToken.cSubtracao ||
-                token.getClasse() == ClasseToken.cMultiplicacao ||
-                token.getClasse() == ClasseToken.cDivisao) {
+                    token.getClasse() == ClasseToken.cSubtracao ||
+                    token.getClasse() == ClasseToken.cMultiplicacao ||
+                    token.getClasse() == ClasseToken.cDivisao) {
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                     token = lexico.getNextToken();
+                    // ERRO: dois operandos seguidos sem operador
+                    if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
+                        mostrarErro("Era esperado um operador entre os operandos.");
+                    }
                 } else {
                     mostrarErro("Era esperado identificador ou inteiro após operador aritmético.");
                 }
