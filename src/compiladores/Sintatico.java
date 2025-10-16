@@ -363,7 +363,6 @@ public class Sintatico {
             }
         } else if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
             token = lexico.getNextToken();
-            // ERRO: dois operandos seguidos sem operador
             if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                 mostrarErro("Era esperado um operador entre os operandos.");
             }
@@ -377,7 +376,6 @@ public class Sintatico {
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                     token = lexico.getNextToken();
-                    // ERRO: dois operandos seguidos sem operador
                     if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                         mostrarErro("Era esperado um operador entre os operandos.");
                     }
@@ -393,7 +391,6 @@ public class Sintatico {
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                     token = lexico.getNextToken();
-                    // ERRO: dois operandos seguidos sem operador
                     if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
                         mostrarErro("Era esperado um operador entre os operandos.");
                     }
