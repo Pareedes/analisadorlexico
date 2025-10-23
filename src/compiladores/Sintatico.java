@@ -227,28 +227,28 @@ public class Sintatico {
                 if (token.getClasse() == ClasseToken.cAtrib) {
                     token = lexico.getNextToken();
                     expressao();
-                    // --- AÇÃO A8 INÍCIO ---
+                    
+                    // --- AÇÕES A49 e A22 INÍCIO ---
+                    // (Substituindo o antigo bloco A8)
+                    
+                    // A49: Verificação semântica
                     if (!tabela.isPresent(variavel)) {
                         System.err.println("Variável " + variavel + " não foi declarada");
                         System.exit(-1);
                     } else {
-                        Registro registro = tabela.get(variavel);
+                        registro = tabela.get(variavel);
                         if (registro.getCategoria() != Categoria.VARIAVEL) {
-                            System.err.println("Identificador " + variavel + " não é uma variável");
+                            System.err.println("O identificador " + variavel + "não é uma variável. A49");
                             System.exit(-1);
-                        } else {
-                            escreverCodigo("\tmov edx, ebp");
-                            escreverCodigo("\tlea eax, [edx - " + registro.getOffset() + "]");
-                            escreverCodigo("\tpush eax");
-                            escreverCodigo("\tpush @Integer");
-                            escreverCodigo("\tcall scanf");
-                            escreverCodigo("\tadd esp, 8");
-                            if (!sectionData.contains("@Integer: db '%d',0")) {
-                                sectionData.add("@Integer: db '%d',0");
-                            }
                         }
+                        
+                        // A22: Geração de código para atribuição
+                        // (Só executa se A49 passou)
+                        escreverCodigo("\tpop eax");
+                        escreverCodigo("\tmov dword[ebp - " + registro.getOffset() + "], eax");
                     }
-                    // --- AÇÃO A8 FIM ---
+                    // --- AÇÕES A49 e A22 FIM ---
+                    
                     if (token.getClasse() == ClasseToken.cPontoVirgula) {
                         token = lexico.getNextToken();
                         continue;
@@ -295,18 +295,42 @@ public class Sintatico {
                 }
             } else if (ehPalavraReservada("for")) {
                 token = lexico.getNextToken();
-                // Consome variável de controle
                 if (token.getClasse() == ClasseToken.cId) {
+                    String varControle = token.getValor().getTexto();
+                    if (!tabela.isPresent(varControle)) {
+                        System.err.println("Variável " + varControle + " não foi declarada");
+                        System.exit(-1);
+                    }
+                    registro = tabela.get(varControle);
                     token = lexico.getNextToken();
                     if (token.getClasse() == ClasseToken.cAtrib) {
                         token = lexico.getNextToken();
                         expressao(); // valor inicial
+                        // --- AÇÃO 11 ---
+                        escreverCodigo("\tpop dword[ebp - " + registro.getOffset() + "]");
+                        String rotuloEntrada = criarRotulo("FOR");
+                        String rotuloSaida = criarRotulo("FIMFOR");
+                        rotulo = rotuloEntrada;
+                        // --- FIM AÇÃO 11 ---
+
                         if (ehPalavraReservada("to")) {
                             token = lexico.getNextToken();
                             expressao(); // valor final
+                            // --- AÇÃO 12 ---
+                            escreverCodigo("\tpush ecx");
+                            escreverCodigo("\tmov ecx, dword[ebp - " + registro.getOffset() + "]");
+                            escreverCodigo("\tcmp ecx, dword[esp+4]"); // +4 por causa do ecx
+                            escreverCodigo("\tjg " + rotuloSaida);
+                            escreverCodigo("\tpop ecx");
+                            // --- FIM AÇÃO 12 ---
                             if (ehPalavraReservada("do")) {
                                 token = lexico.getNextToken();
-                                sentencas(); // bloco do for
+                                sentencas();
+                                // --- AÇÃO 13 INÍCIO ---
+                                escreverCodigo("\tadd dword[ebp - " + registro.getOffset() + "], 1");
+                                escreverCodigo("\tjmp " + rotuloEntrada);
+                                rotulo = rotuloSaida;
+                                // --- AÇÃO 13 FIM ---
                                 continue;
                             } else {
                                 mostrarErro("Era esperado 'do' após 'to' no for.");
@@ -321,6 +345,12 @@ public class Sintatico {
                     mostrarErro("Era esperado identificador após 'for'.");
                 }
             } else if (ehPalavraReservada("while")) {
+                // --- AÇÃO 16 INÍCIO ---
+                String rotuloWhile = criarRotulo("While");
+                String rotuloFim = criarRotulo("FimWhile");
+                rotulo = rotuloWhile;
+                // --- AÇÃO 16 FIM ---
+
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cParEsq) {
                     token = lexico.getNextToken();
@@ -333,9 +363,21 @@ public class Sintatico {
                 } else {
                     expressao();
                 }
+
+                // --- AÇÃO 17 INÍCIO ---
+                escreverCodigo("\tcmp dword[esp], 0");
+                escreverCodigo("\tje " + rotuloFim);
+                // --- AÇÃO 17 FIM ---
+
                 if (ehPalavraReservada("do")) {
                     token = lexico.getNextToken();
                     sentencas();
+
+                    // --- AÇÃO 18 INÍCIO ---
+                    escreverCodigo("\tjmp " + rotuloWhile);
+                    rotulo = rotuloFim;
+                    // --- AÇÃO 18 FIM ---
+
                     continue;
                 } else {
                     mostrarErro("Era esperado 'do' após while.");
@@ -343,31 +385,62 @@ public class Sintatico {
             } else if (ehPalavraReservada("if")) {
                 token = lexico.getNextToken();
                 expressao();
+
+                // --- AÇÃO 19 INÍCIO ---
+                rotuloElse = criarRotulo("Else");
+                String rotuloFim = criarRotulo("FimIf");
+                escreverCodigo("\tcmp dword[esp], 0\n");
+                escreverCodigo("\tje " + rotuloElse);
+                // --- AÇÃO 19 FIM ---
+
                 if (ehPalavraReservada("then")) {
                     token = lexico.getNextToken();
-                    sentencas();
+                    sentencas(); // Bloco 'then'
+                    
                     if (ehPalavraReservada("else")) {
+                        // --- AÇÃO 20 INÍCIO ---
+                        escreverCodigo("\tjmp " + rotuloFim);
+                        // --- AÇÃO 20 FIM ---
+
+                        // --- AÇÃO 25 INÍCIO ---
+                        // Define o rótulo do 'else'
+                        rotulo = rotuloElse;
+                        // --- AÇÃO 25 FIM ---
+
                         token = lexico.getNextToken();
-                        sentencas();
+                        sentencas(); // Bloco 'else'
+                        
+                        // --- AÇÃO 21 INÍCIO ---
+                        // Define o rótulo do 'fimif'
+                        rotulo = rotuloFim;
+                        // --- AÇÃO 21 FIM ---
+
+                    } else {
+                        // Se não houver 'else', A25 define a saída
+                        // --- AÇÃO 25 INÍCIO ---
+                        rotulo = rotuloElse;
+                        // --- AÇÃO 25 FIM ---
                     }
                     continue;
                 } else {
                     mostrarErro("Era esperado 'then' após if.");
                 }
-            } else if (ehPalavraReservada("true") || ehPalavraReservada("false")) {
-                token = lexico.getNextToken();
-                if (token.getClasse() == ClasseToken.cPontoVirgula) {
-                    token = lexico.getNextToken();
-                    continue;
-                } else {
-                    mostrarErro("Era esperado ';' após true/false.");
-                }
             } else if (ehPalavraReservada("repeat")) {
                 token = lexico.getNextToken();
+                // --- AÇÃO 14 INÍCIO ---
+                String rotRepeat = criarRotulo("Repeat");
+                rotulo = rotRepeat;
+                // --- AÇÃO 14 FIM ---
                 sentencas();
                 if (ehPalavraReservada("until")) {
                     token = lexico.getNextToken();
                     expressao();
+
+                    // --- AÇÃO 15 INÍCIO ---
+                    escreverCodigo("\tcmp dword[esp], 0");
+                    escreverCodigo("\tje " + rotRepeat);
+                    // --- AÇÃO 15 FIM ---
+
                     if (token.getClasse() == ClasseToken.cPontoVirgula) {
                         token = lexico.getNextToken();
                         continue;
@@ -528,17 +601,108 @@ public class Sintatico {
 
     private void expressao() {
         termo();
-        while (ehPalavraReservada("or")) {
+        // Loop para operadores de baixa precedência: +, -, OR
+        while (token.getClasse() == ClasseToken.cAdicao ||
+                token.getClasse() == ClasseToken.cSubtracao ||
+                ehPalavraReservada("or")) {
+
+            ClasseToken operadorAri = null;
+            boolean isOr = false;
+
+            if (ehPalavraReservada("or")) {
+                isOr = true;
+            } else {
+                operadorAri = token.getClasse(); // Salva o operador aritmético
+            }
+
             token = lexico.getNextToken();
             termo();
+
+            if (isOr) {
+                // --- AÇÃO 26 (OR) INÍCIO ---
+                String rotSaida = criarRotulo("SaidaMEL");
+                String rotVerdade = criarRotulo("VerdadeMEL");
+                escreverCodigo("\tcmp dword [ESP + 4], 1");
+                escreverCodigo("\tje " + rotVerdade);
+                escreverCodigo("\tcmp dword [ESP], 1");
+                escreverCodigo("\tje " + rotVerdade);
+                escreverCodigo("\tmov dword [ESP + 4], 0");
+                escreverCodigo("\tjmp " + rotSaida);
+                rotulo = rotVerdade;
+                escreverCodigo("\tmov dword [ESP + 4], 1");
+                rotulo = rotSaida;
+                escreverCodigo("\tadd esp, 4");
+                // --- AÇÃO 26 (OR) FIM ---
+            } else if (operadorAri == ClasseToken.cAdicao) {
+                // --- AÇÃO 37 INÍCIO ---
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\tadd dword[ESP], eax");
+                // --- AÇÃO 37 FIM ---
+            } else if (operadorAri == ClasseToken.cSubtracao) {
+                // --- AÇÃO 38 (Subtração) INÍCIO ---
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\tsub dword[ESP], eax");
+                // --- AÇÃO 38 (Subtração) FIM ---
+            }
         }
     }
 
     private void termo() {
         fator();
-        while (ehPalavraReservada("and")) {
+        // Loop para operadores de alta precedência: *, /, AND
+        while (token.getClasse() == ClasseToken.cMultiplicacao ||
+                token.getClasse() == ClasseToken.cDivisao ||
+                ehPalavraReservada("and")) {
+
+            ClasseToken operadorAri = null;
+            boolean isAnd = false;
+
+            if (ehPalavraReservada("and")) {
+                isAnd = true;
+            } else {
+                operadorAri = token.getClasse(); // Salva o operador aritmético
+            }
+
             token = lexico.getNextToken();
             fator();
+
+            if (isAnd) {
+                // --- AÇÃO 27 (AND) INÍCIO ---
+                // Implementado de forma semelhante à Ação 26, conforme solicitado.
+                String rotSaida = criarRotulo("SaidaMTL");
+                String rotFalso = criarRotulo("FalsoMTL");
+
+                escreverCodigo("\tcmp dword [ESP + 4], 1"); // Compara Op1
+                escreverCodigo("\tjne " + rotFalso); // Se Op1 != 1 (false), resultado é false
+                escreverCodigo("\tcmp dword [ESP], 1"); // Compara Op2
+                escreverCodigo("\tjne " + rotFalso); // Se Op2 != 1 (false), resultado é false
+
+                // Se ambos são 1 (true)
+                escreverCodigo("\tmov dword [ESP + 4], 1"); // resultado é 1 (true)
+                escreverCodigo("\tjmp " + rotSaida);
+
+                // Se um deles é 0 (false)
+                rotulo = rotFalso;
+                escreverCodigo("\tmov dword [ESP + 4], 0"); // resultado é 0 (false)
+
+                // Saída
+                rotulo = rotSaida;
+                escreverCodigo("\tadd esp, 4"); // Limpa o segundo operando da pilha
+                // --- AÇÃO 27 (AND) FIM ---
+            } else if (operadorAri == ClasseToken.cMultiplicacao) {
+                // --- AÇÃO 39 INÍCIO ---
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\timul eax, dword [ESP]");
+                escreverCodigo("\tmov dword [ESP], eax");
+                // --- AÇÃO 39 FIM ---
+            } else if (operadorAri == ClasseToken.cDivisao) {
+                // --- AÇÃO 40 INÍCIO ---
+                escreverCodigo("\tpop ecx");
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\tidiv ecx");
+                escreverCodigo("\tpush eax");
+                // --- AÇÃO 40 FIM ---
+            }
         }
     }
 
@@ -546,6 +710,17 @@ public class Sintatico {
         if (ehPalavraReservada("not")) {
             token = lexico.getNextToken();
             fator();
+            // --- AÇÃO A28 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoFL");
+            String rotSaida = criarRotulo("SaidaFL");
+            escreverCodigo("\tcmp dword [ESP], 1");
+            escreverCodigo("\tjne " + rotFalso);
+            escreverCodigo("\tmov dword [ESP], 0");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 1");
+            rotulo = rotSaida;
+            // --- AÇÃO A28 FIM ---
         } else if (token.getClasse() == ClasseToken.cParEsq) {
             token = lexico.getNextToken();
             expressao();
@@ -554,45 +729,136 @@ public class Sintatico {
             } else {
                 mostrarErro("Era esperado ')' após expressão entre parênteses.");
             }
-        } else if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
+        } else if (token.getClasse() == ClasseToken.cId) {
+            // --- AÇÃO 57 INÍCIO ---
+            String variavel = token.getValor().getTexto();
+            if (!tabela.isPresent(variavel)) {
+                System.err.println("Variável " + variavel + " não foi declarada");
+                System.exit(-1);
+            } else {
+                registro = tabela.get(variavel);
+                if (registro.getCategoria() != Categoria.VARIAVEL) {
+                    System.err.println("O identificador " + variavel + "não é uma variável. A57");
+                    System.exit(-1);
+                }
+                // --- AÇÃO 55 INÍCIO ---
+                escreverCodigo("\tpush dword[ebp - " + registro.getOffset() + "]");
+                // --- AÇÃO 55 FIM ---
+            }
+            // --- AÇÃO 57 FIM ---
             token = lexico.getNextToken();
-            if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
-                mostrarErro("Era esperado um operador entre os operandos.");
-            }
-            // Operadores relacionais
-            while (token.getClasse() == ClasseToken.cMaior ||
-                    token.getClasse() == ClasseToken.cMenor ||
-                    token.getClasse() == ClasseToken.cMaiorIgual ||
-                    token.getClasse() == ClasseToken.cMenorIgual ||
-                    token.getClasse() == ClasseToken.cIgual ||
-                    token.getClasse() == ClasseToken.cDiferente) {
-                token = lexico.getNextToken();
-                if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
-                    token = lexico.getNextToken();
-                    if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
-                        mostrarErro("Era esperado um operador entre os operandos.");
-                    }
-                } else {
-                    mostrarErro("Era esperado identificador ou inteiro após operador relacional.");
-                }
-            }
-            // Operadores aritméticos
-            while (token.getClasse() == ClasseToken.cAdicao ||
-                    token.getClasse() == ClasseToken.cSubtracao ||
-                    token.getClasse() == ClasseToken.cMultiplicacao ||
-                    token.getClasse() == ClasseToken.cDivisao) {
-                token = lexico.getNextToken();
-                if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
-                    token = lexico.getNextToken();
-                    if (token.getClasse() == ClasseToken.cId || token.getClasse() == ClasseToken.cInt) {
-                        mostrarErro("Era esperado um operador entre os operandos.");
-                    }
-                } else {
-                    mostrarErro("Era esperado identificador ou inteiro após operador aritmético.");
-                }
-            }
+        } else if (token.getClasse() == ClasseToken.cInt) {
+            // --- AÇÃO 41 INÍCIO ---
+            escreverCodigo("\tpush " + token.getValor().getInteiro());
+            // --- AÇÃO 41 FIM ---
+            token = lexico.getNextToken();
+        } else if (ehPalavraReservada("true")) {
+            // --- AÇÃO 29 INÍCIO ---
+            escreverCodigo("\tpush 1");
+            // --- AÇÃO 29 FIM ---
+            token = lexico.getNextToken();
+        } else if (ehPalavraReservada("false")) {
+            // --- AÇÃO 30 INÍCIO ---
+            escreverCodigo("\tpush 0");
+            // --- AÇÃO 30 FIM ---
+            token = lexico.getNextToken();
         } else {
-            mostrarErro("Era esperado identificador, inteiro ou operador lógico na expressão.");
+            mostrarErro("Era esperado identificador, inteiro, 'true', 'false', 'not' ou '(' na expressão.");
+        }
+    }
+
+    private void relacao() {
+        expressao(); // Process the first expression
+        if (token.getClasse() == ClasseToken.cIgual) { // Check for '=' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A31 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tjne " + rotFalso);
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A31 FIM ---
+        } else if (token.getClasse() == ClasseToken.cMaior) { // Check for '>' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A32 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tjle " + rotFalso); // Jump if less than or equal
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A32 FIM ---
+        } else if (token.getClasse() == ClasseToken.cMaiorIgual) { // Check for '>=' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A33 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tjl " + rotFalso); // Jump if less than
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A33 FIM ---
+        } else if (token.getClasse() == ClasseToken.cMenor) { // Check for '<' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A34 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tjge " + rotFalso); // Jump if greater than or equal
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A34 FIM ---
+        } else if (token.getClasse() == ClasseToken.cMenorIgual) { // Check for '<=' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A35 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tjg " + rotFalso);
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A35 FIM ---
+        } else if (token.getClasse() == ClasseToken.cDiferente) { // Check for '<>' operator
+            token = lexico.getNextToken();
+            expressao(); // Process the second expression
+            // --- AÇÃO A36 INÍCIO ---
+            String rotFalso = criarRotulo("FalsoREL");
+            String rotSaida = criarRotulo("SaidaREL");
+            escreverCodigo("\tpop eax");
+            escreverCodigo("\tcmp dword [ESP], eax");
+            escreverCodigo("\tje " + rotFalso);
+            escreverCodigo("\tmov dword [ESP], 1");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotFalso;
+            escreverCodigo("\tmov dword [ESP], 0");
+            rotulo = rotSaida;
+            // --- AÇÃO A36 FIM ---
         }
     }
 
