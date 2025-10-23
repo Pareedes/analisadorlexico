@@ -227,10 +227,10 @@ public class Sintatico {
                 if (token.getClasse() == ClasseToken.cAtrib) {
                     token = lexico.getNextToken();
                     expressao();
-                    
+
                     // --- AÇÕES A49 e A22 INÍCIO ---
                     // (Substituindo o antigo bloco A8)
-                    
+
                     // A49: Verificação semântica
                     if (!tabela.isPresent(variavel)) {
                         System.err.println("Variável " + variavel + " não foi declarada");
@@ -241,14 +241,14 @@ public class Sintatico {
                             System.err.println("O identificador " + variavel + "não é uma variável. A49");
                             System.exit(-1);
                         }
-                        
+
                         // A22: Geração de código para atribuição
                         // (Só executa se A49 passou)
                         escreverCodigo("\tpop eax");
                         escreverCodigo("\tmov dword[ebp - " + registro.getOffset() + "], eax");
                     }
                     // --- AÇÕES A49 e A22 FIM ---
-                    
+
                     if (token.getClasse() == ClasseToken.cPontoVirgula) {
                         token = lexico.getNextToken();
                         continue;
@@ -396,7 +396,7 @@ public class Sintatico {
                 if (ehPalavraReservada("then")) {
                     token = lexico.getNextToken();
                     sentencas(); // Bloco 'then'
-                    
+
                     if (ehPalavraReservada("else")) {
                         // --- AÇÃO 20 INÍCIO ---
                         escreverCodigo("\tjmp " + rotuloFim);
@@ -409,7 +409,7 @@ public class Sintatico {
 
                         token = lexico.getNextToken();
                         sentencas(); // Bloco 'else'
-                        
+
                         // --- AÇÃO 21 INÍCIO ---
                         // Define o rótulo do 'fimif'
                         rotulo = rotuloFim;
@@ -599,54 +599,6 @@ public class Sintatico {
         }
     }
 
-    private void expressao() {
-        termo();
-        // Loop para operadores de baixa precedência: +, -, OR
-        while (token.getClasse() == ClasseToken.cAdicao ||
-                token.getClasse() == ClasseToken.cSubtracao ||
-                ehPalavraReservada("or")) {
-
-            ClasseToken operadorAri = null;
-            boolean isOr = false;
-
-            if (ehPalavraReservada("or")) {
-                isOr = true;
-            } else {
-                operadorAri = token.getClasse(); // Salva o operador aritmético
-            }
-
-            token = lexico.getNextToken();
-            termo();
-
-            if (isOr) {
-                // --- AÇÃO 26 (OR) INÍCIO ---
-                String rotSaida = criarRotulo("SaidaMEL");
-                String rotVerdade = criarRotulo("VerdadeMEL");
-                escreverCodigo("\tcmp dword [ESP + 4], 1");
-                escreverCodigo("\tje " + rotVerdade);
-                escreverCodigo("\tcmp dword [ESP], 1");
-                escreverCodigo("\tje " + rotVerdade);
-                escreverCodigo("\tmov dword [ESP + 4], 0");
-                escreverCodigo("\tjmp " + rotSaida);
-                rotulo = rotVerdade;
-                escreverCodigo("\tmov dword [ESP + 4], 1");
-                rotulo = rotSaida;
-                escreverCodigo("\tadd esp, 4");
-                // --- AÇÃO 26 (OR) FIM ---
-            } else if (operadorAri == ClasseToken.cAdicao) {
-                // --- AÇÃO 37 INÍCIO ---
-                escreverCodigo("\tpop eax");
-                escreverCodigo("\tadd dword[ESP], eax");
-                // --- AÇÃO 37 FIM ---
-            } else if (operadorAri == ClasseToken.cSubtracao) {
-                // --- AÇÃO 38 (Subtração) INÍCIO ---
-                escreverCodigo("\tpop eax");
-                escreverCodigo("\tsub dword[ESP], eax");
-                // --- AÇÃO 38 (Subtração) FIM ---
-            }
-        }
-    }
-
     private void termo() {
         fator();
         // Loop para operadores de alta precedência: *, /, AND
@@ -767,11 +719,51 @@ public class Sintatico {
         }
     }
 
-    private void relacao() {
-        expressao(); // Process the first expression
+    /**
+     * NOVO MÉTODO (Nível 5 de Precedência: 'or')
+     * Este é o novo ponto de entrada principal para qualquer expressão.
+     * Gramática: <expressao> ::= <expressao_relacional> [ or <expressao_relacional>
+     * ]*
+     */
+    private void expressao() {
+        expressaoRelacional(); // Chama o nível de precedência abaixo
+
+        // Loop para o operador lógico 'or' (precedência mais baixa)
+        while (ehPalavraReservada("or")) {
+
+            token = lexico.getNextToken();
+            expressaoRelacional(); // Chama o nível relacional novamente
+
+            // --- AÇÃO 26 (OR) INÍCIO ---
+            String rotSaida = criarRotulo("SaidaMEL");
+            String rotVerdade = criarRotulo("VerdadeMEL");
+            escreverCodigo("\tcmp dword [ESP + 4], 1");
+            escreverCodigo("\tje " + rotVerdade);
+            escreverCodigo("\tcmp dword [ESP], 1");
+            escreverCodigo("\tje " + rotVerdade);
+            escreverCodigo("\tmov dword [ESP + 4], 0");
+            escreverCodigo("\tjmp " + rotSaida);
+            rotulo = rotVerdade;
+            escreverCodigo("\tmov dword [ESP + 4], 1");
+            rotulo = rotSaida;
+            escreverCodigo("\tadd esp, 4");
+            // --- AÇÃO 26 (OR) FIM ---
+        }
+    }
+
+    /**
+     * MÉTODO RENOMEADO (Nível 4 de Precedência: Operadores Relacionais)
+     * Este é o seu antigo método relacao(), agora chamado expressaoRelacional()
+     * e corrigido para chamar expressaoSimples().
+     * Gramática: <expressao_relacional> ::= <expressao_simples> [ (< | > | = | ...)
+     * <expressao_simples> ]?
+     */
+    private void expressaoRelacional() {
+        expressaoSimples(); // MODIFICADO (era expressao())
+
         if (token.getClasse() == ClasseToken.cIgual) { // Check for '=' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A31 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -786,7 +778,7 @@ public class Sintatico {
             // --- AÇÃO A31 FIM ---
         } else if (token.getClasse() == ClasseToken.cMaior) { // Check for '>' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A32 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -801,7 +793,7 @@ public class Sintatico {
             // --- AÇÃO A32 FIM ---
         } else if (token.getClasse() == ClasseToken.cMaiorIgual) { // Check for '>=' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A33 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -816,7 +808,7 @@ public class Sintatico {
             // --- AÇÃO A33 FIM ---
         } else if (token.getClasse() == ClasseToken.cMenor) { // Check for '<' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A34 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -831,7 +823,7 @@ public class Sintatico {
             // --- AÇÃO A34 FIM ---
         } else if (token.getClasse() == ClasseToken.cMenorIgual) { // Check for '<=' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A35 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -846,7 +838,7 @@ public class Sintatico {
             // --- AÇÃO A35 FIM ---
         } else if (token.getClasse() == ClasseToken.cDiferente) { // Check for '<>' operator
             token = lexico.getNextToken();
-            expressao(); // Process the second expression
+            expressaoSimples(); // MODIFICADO (era expressao())
             // --- AÇÃO A36 INÍCIO ---
             String rotFalso = criarRotulo("FalsoREL");
             String rotSaida = criarRotulo("SaidaREL");
@@ -859,6 +851,37 @@ public class Sintatico {
             escreverCodigo("\tmov dword [ESP], 0");
             rotulo = rotSaida;
             // --- AÇÃO A36 FIM ---
+        }
+    }
+
+    /**
+     * MÉTODO RENOMEADO (Nível 3 de Precedência: '+' e '-')
+     * Este é o seu antigo método expressao(), agora focado apenas em adição e
+     * subtração.
+     * Gramática: <expressao_simples> ::= <termo> [ (+ | -) <termo> ]*
+     */
+    private void expressaoSimples() {
+        termo();
+        // Loop para operadores aritméticos de baixa precedência: +, -
+        while (token.getClasse() == ClasseToken.cAdicao ||
+                token.getClasse() == ClasseToken.cSubtracao) {
+
+            ClasseToken operadorAri = token.getClasse(); // Salva o operador aritmético
+
+            token = lexico.getNextToken();
+            termo();
+
+            if (operadorAri == ClasseToken.cAdicao) {
+                // --- AÇÃO 37 INÍCIO ---
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\tadd dword[ESP], eax");
+                // --- AÇÃO 37 FIM ---
+            } else if (operadorAri == ClasseToken.cSubtracao) {
+                // --- AÇÃO 38 (Subtração) INÍCIO ---
+                escreverCodigo("\tpop eax");
+                escreverCodigo("\tsub dword[ESP], eax");
+                // --- AÇÃO 38 (Subtração) FIM ---
+            }
         }
     }
 
