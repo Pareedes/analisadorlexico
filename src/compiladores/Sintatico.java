@@ -1,13 +1,66 @@
 package compiladores;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+
 public class Sintatico {
 
     private Token token;
     private Lexico lexico;
+    private TabelaSimbolos tabela = new TabelaSimbolos();
+    private String rotulo = "";
+    private String nomeArquivo; // Adicione esta linha
+    private int contRotulo = 1;
+    private int offsetVariavel = 0;
+    private String nomeArquivoSaida;
+    private String caminhoArquivoSaida;
+    private BufferedWriter bw;
+    private FileWriter fw;
+    private static final int TAMANHO_INTEIRO = 4;
+    private List<String> variaveis = new ArrayList<>();
+    private List<String> sectionData = new ArrayList<>();
+    private Registro registro;
+    private String rotuloElse;
 
     public Sintatico(String nomeArquivo) {
+        this.nomeArquivo = nomeArquivo;
         lexico = new Lexico(nomeArquivo);
         token = lexico.getNextToken();
+
+        nomeArquivoSaida = "queronemver.asm";
+        caminhoArquivoSaida = Paths.get(nomeArquivoSaida).toAbsolutePath().toString();
+        bw = null;
+        fw = null;
+        try {
+            fw = new FileWriter(caminhoArquivoSaida, Charset.forName("UTF-8"));
+            bw = new BufferedWriter(fw);
+        } catch (Exception e) {
+            System.err.println("Erro ao criar arquivo de saída");
+        }
+    }
+
+    private void escreverCodigo(String instrucoes) {
+        try {
+            if (rotulo.isEmpty()) {
+                bw.write(instrucoes + "\n");
+            } else {
+                bw.write(rotulo + ": " + instrucoes + "\n");
+                rotulo = "";
+            }
+        } catch (IOException e) {
+            System.err.println("Erro escrevendo no arquivo de saída");
+        }
+    }
+
+    private String criarRotulo(String texto) {
+        String retorno = "rotulo" + texto + contRotulo;
+        contRotulo++;
+        return retorno;
     }
 
     public void analisar() {
@@ -20,7 +73,18 @@ public class Sintatico {
             token = lexico.getNextToken();
             if (token.getClasse() == ClasseToken.cId) {
                 token = lexico.getNextToken();
-                // {A01}
+                Registro registro = tabela.add(token.getValor().getTexto());
+                offsetVariavel = 0;
+                registro.setCategoria(Categoria.PROGRAMA_PRINCIPAL);
+                escreverCodigo("global main");
+                escreverCodigo("extern printf");
+                escreverCodigo("extern scanf\n");
+                escreverCodigo("section .text");
+                rotulo = "main";
+                escreverCodigo("\t; Entrada do programa");
+                escreverCodigo("\tpush ebp");
+                escreverCodigo("\tmov ebp, esp");
+
                 if (token.getClasse() == ClasseToken.cPontoVirgula) {
                     token = lexico.getNextToken();
                     corpo();
@@ -100,6 +164,15 @@ public class Sintatico {
 
     private void tipo_var() {
         if (ehPalavraReservada("integer")) {
+            // AÇÃO A03: atribuir tipo e registrar variáveis na tabela de símbolos
+            for (String nomeVar : variaveis) {
+                Registro regVar = tabela.add(nomeVar);
+                regVar.setCategoria(Categoria.VARIAVEL);
+                regVar.setTipo(Tipo.INTEGER);
+                regVar.setOffset(offsetVariavel);
+                offsetVariavel += TAMANHO_INTEIRO;
+            }
+            variaveis.clear(); // Limpa a lista para próxima declaração
             token = lexico.getNextToken();
         } else {
             mostrarErro("Era esperado a palavra reservada 'integer' para o tipo da variável.");
@@ -108,6 +181,13 @@ public class Sintatico {
 
     private void variaveis() {
         if (token.getClasse() == ClasseToken.cId) {
+            int tamanho = 0;
+            for (String var : variaveis) {
+                tabela.get(var).setTipo(Tipo.INTEGER);
+                tamanho += TAMANHO_INTEIRO;
+            }
+            escreverCodigo("\tsub esp, " + tamanho);
+            variaveis.clear();
             token = lexico.getNextToken();
             mais_var();
         } else {
@@ -141,10 +221,34 @@ public class Sintatico {
     private void sentencas() {
         while (true) {
             if (token.getClasse() == ClasseToken.cId) {
+                // Captura o nome da variável antes de avançar o token
+                String variavel = token.getValor().getTexto();
                 token = lexico.getNextToken();
                 if (token.getClasse() == ClasseToken.cAtrib) {
                     token = lexico.getNextToken();
                     expressao();
+                    // --- AÇÃO A8 INÍCIO ---
+                    if (!tabela.isPresent(variavel)) {
+                        System.err.println("Variável " + variavel + " não foi declarada");
+                        System.exit(-1);
+                    } else {
+                        Registro registro = tabela.get(variavel);
+                        if (registro.getCategoria() != Categoria.VARIAVEL) {
+                            System.err.println("Identificador " + variavel + " não é uma variável");
+                            System.exit(-1);
+                        } else {
+                            escreverCodigo("\tmov edx, ebp");
+                            escreverCodigo("\tlea eax, [edx - " + registro.getOffset() + "]");
+                            escreverCodigo("\tpush eax");
+                            escreverCodigo("\tpush @Integer");
+                            escreverCodigo("\tcall scanf");
+                            escreverCodigo("\tadd esp, 8");
+                            if (!sectionData.contains("@Integer: db '%d',0")) {
+                                sectionData.add("@Integer: db '%d',0");
+                            }
+                        }
+                    }
+                    // --- AÇÃO A8 FIM ---
                     if (token.getClasse() == ClasseToken.cPontoVirgula) {
                         token = lexico.getNextToken();
                         continue;
@@ -278,9 +382,49 @@ public class Sintatico {
                 if (token.getClasse() == ClasseToken.cParEsq) {
                     token = lexico.getNextToken();
                     // Exige pelo menos um parâmetro
-                    if (token.getClasse() == ClasseToken.cString ||
-                            token.getClasse() == ClasseToken.cId ||
-                            token.getClasse() == ClasseToken.cInt) {
+                    if (token.getClasse() == ClasseToken.cId) {
+                        // --- AÇÃO 09 INÍCIO ---
+                        String variavel = token.getValor().getTexto();
+                        if (!tabela.isPresent(variavel)) {
+                            System.err.println("Variável " + variavel + " não foi declarada");
+                            System.exit(-1);
+                        } else {
+                            Registro registro = tabela.get(variavel);
+                            if (registro.getCategoria() != Categoria.VARIAVEL) {
+                                System.err.println("Identificador " + variavel + " não é uma variável");
+                                System.exit(-1);
+                            } else {
+                                escreverCodigo("\tpush dword[ebp - " + registro.getOffset() + "]");
+                                escreverCodigo("\tpush @Integer");
+                                escreverCodigo("\tcall printf");
+                                escreverCodigo("\tadd esp, 8");
+                                if (!sectionData.contains("@Integer: db '%d',0")) {
+                                    sectionData.add("@Integer: db '%d',0");
+                                }
+                            }
+                        }
+                        // --- AÇÃO 09 FIM ---
+                        token = lexico.getNextToken();
+                    } else if (token.getClasse() == ClasseToken.cString) {
+                        // --- AÇÃO 59 INÍCIO ---
+                        String string = token.getValor().getTexto();
+                        String rotuloString = criarRotulo("String");
+                        escreverCodigo("\tpush " + rotuloString);
+                        escreverCodigo("\tcall printf");
+                        escreverCodigo("\tadd esp, 4");
+                        sectionData.add(rotuloString + ": db '" + string + "', 0");
+                        // --- AÇÃO 59 FIM ---
+                        token = lexico.getNextToken();
+                    } else if (token.getClasse() == ClasseToken.cInt) {
+                        // --- AÇÃO 43 INÍCIO ---
+                        escreverCodigo("\tpush " + token.getValor().getInteiro());
+                        escreverCodigo("\tpush @Integer");
+                        escreverCodigo("\tcall printf");
+                        escreverCodigo("\tadd esp, 8");
+                        if (!sectionData.contains("@Integer: db '%d',0")) {
+                            sectionData.add("@Integer: db '%d',0");
+                        }
+                        // --- AÇÃO 43 FIM ---
                         token = lexico.getNextToken();
                     } else {
                         mostrarErro("write requer pelo menos um parâmetro.");
@@ -304,14 +448,63 @@ public class Sintatico {
                 if (token.getClasse() == ClasseToken.cParEsq) {
                     token = lexico.getNextToken();
                     // Exige pelo menos um parâmetro
-                    if (token.getClasse() == ClasseToken.cString ||
-                            token.getClasse() == ClasseToken.cId ||
-                            token.getClasse() == ClasseToken.cInt) {
+                    if (token.getClasse() == ClasseToken.cString) {
+                        // --- AÇÃO 59 INÍCIO ---
+                        String string = token.getValor().getTexto();
+                        String rotuloString = criarRotulo("String");
+                        escreverCodigo("\tpush " + rotuloString);
+                        escreverCodigo("\tcall printf");
+                        escreverCodigo("\tadd esp, 4");
+                        sectionData.add(rotuloString + ": db '" + string + "', 10, 0");
+                        // --- AÇÃO 59 FIM ---
+                        token = lexico.getNextToken();
+                    } else if (token.getClasse() == ClasseToken.cId) {
+                        // --- AÇÃO 09 INÍCIO ---
+                        String variavel = token.getValor().getTexto();
+                        if (!tabela.isPresent(variavel)) {
+                            System.err.println("Variável " + variavel + " não foi declarada");
+                            System.exit(-1);
+                        } else {
+                            Registro registro = tabela.get(variavel);
+                            if (registro.getCategoria() != Categoria.VARIAVEL) {
+                                System.err.println("Identificador " + variavel + " não é uma variável");
+                                System.exit(-1);
+                            } else {
+                                escreverCodigo("\tpush dword[ebp - " + registro.getOffset() + "]");
+                                escreverCodigo("\tpush @Integer");
+                                escreverCodigo("\tcall printf");
+                                escreverCodigo("\tadd esp, 8");
+                                if (!sectionData.contains("@Integer: db '%d',0")) {
+                                    sectionData.add("@Integer: db '%d',0");
+                                }
+                            }
+                        }
+                        // --- AÇÃO 09 FIM ---
+                        token = lexico.getNextToken();
+                    } else if (token.getClasse() == ClasseToken.cInt) {
+                        // --- AÇÃO 43 INÍCIO ---
+                        escreverCodigo("\tpush " + token.getValor().getInteiro());
+                        escreverCodigo("\tpush @Integer");
+                        escreverCodigo("\tcall printf");
+                        escreverCodigo("\tadd esp, 8");
+                        if (!sectionData.contains("@Integer: db '%d',0")) {
+                            sectionData.add("@Integer: db '%d',0");
+                        }
+                        // --- AÇÃO 43 FIM ---
                         token = lexico.getNextToken();
                     } else {
                         mostrarErro("writeln requer pelo menos um parâmetro.");
                     }
                     if (token.getClasse() == ClasseToken.cParDir) {
+                        // --- AÇÃO 61 INÍCIO ---
+                        String novaLinha = "rotuloStringLN: db '',10,0";
+                        if (!sectionData.contains(novaLinha)) {
+                            sectionData.add(novaLinha);
+                        }
+                        escreverCodigo("\tpush rotuloStringLN");
+                        escreverCodigo("\tcall printf");
+                        escreverCodigo("\tadd esp, 4");
+                        // --- AÇÃO 61 FIM --
                         token = lexico.getNextToken();
                     } else {
                         mostrarErro("Era esperado ')' após parâmetro de writeln.");
